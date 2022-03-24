@@ -1,9 +1,6 @@
-
-
-
 #include <NTPClient.h>
 #include <WiFiUdp.h>
-#define wifi D5
+#define wifi D7
 const long utcOffsetInSeconds = 10800;
 // Define NTP Client to get time
 WiFiUDP ntpUDP;
@@ -18,8 +15,8 @@ NTPClient timeClient(ntpUDP, "pool.ntp.org", utcOffsetInSeconds);
 #include <BlynkSimpleEsp8266.h>
 String phoneNumber = "+254790668724";
 char auth[] = BLYNK_AUTH_TOKEN;
-char ssid[] = "Enter ssid";
-char pass[] = "50010003";
+char ssid[] = "woooow";
+char pass[] = "meme1234";
 
 BlynkTimer timer;
 bool irrigation_started = false;
@@ -34,7 +31,7 @@ int irrigation2StopM = 0;
 int irrigation2StopH = 0;
 
 int pump = D6;
-int valve = D7;
+int valve = D5;
 int TimeH;
 int TimeM;
 String DateDay;
