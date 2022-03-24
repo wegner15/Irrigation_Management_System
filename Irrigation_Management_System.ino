@@ -8,6 +8,7 @@ NTPClient timeClient(ntpUDP, "pool.ntp.org", utcOffsetInSeconds);
 #define BLYNK_TEMPLATE_ID "Enter Template ID"
 #define BLYNK_DEVICE_NAME "Irrigation Control Vs"
 #define BLYNK_AUTH_TOKEN "Enter Authorization Token"
+#define BLYNK_DEVICE_NAME "Irrigation Control System"
 #define BLYNK_FIRMWARE_VERSION "0.1.2"
 // Comment this out to disable prints and save space
 //#define BLYNK_PRINT Serial
