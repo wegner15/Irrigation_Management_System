@@ -1,23 +1,27 @@
-#include <NTPClient.h>
+#include <NTPClient.h>  
 #include <WiFiUdp.h>
-#define wifi D7
+#define wifi D6
+#define pump D2
+#define valve D3
+#define StatusLED D5
+
 const long utcOffsetInSeconds = 10800;
 // Define NTP Client to get time
 WiFiUDP ntpUDP;
 NTPClient timeClient(ntpUDP, "pool.ntp.org", utcOffsetInSeconds);
-#define BLYNK_TEMPLATE_ID "Enter Template ID"
-#define BLYNK_DEVICE_NAME "Irrigation Control Vs"
-#define BLYNK_AUTH_TOKEN "Enter Authorization Token"
+#define BLYNK_TEMPLATE_ID "TMPLT97ff-Ic"
+#define BLYNK_TEMPLATE_NAME "Irrigation Control System"
+#define BLYNK_AUTH_TOKEN "nT6zig82GxGaLEXhRHR2vNpDXR4K5Di1"
 #define BLYNK_DEVICE_NAME "Irrigation Control System"
-#define BLYNK_FIRMWARE_VERSION "0.1.2"
+#define BLYNK_FIRMWARE_VERSION "0.1.3"
 // Comment this out to disable prints and save space
 //#define BLYNK_PRINT Serial
 #include <ESP8266WiFi.h>
 #include <BlynkSimpleEsp8266.h>
 String phoneNumber = "+254790668724";
 char auth[] = BLYNK_AUTH_TOKEN;
-char ssid[] = "woooow";
-char pass[] = "meme1234";
+char ssid[] = "MobileRouter-603F";
+char pass[] = "50010003";
 
 BlynkTimer timer;
 bool irrigation_started = false;
@@ -28,11 +32,16 @@ int first_irrigation_start_minute = 51;
 int second_irrigation_start_hour = 18;
 int second_irrigation_start_minute = 30;
 int irrigationStopM = 0;
+int irrigationStopH = 0;
 int irrigation2StopM = 0;
 int irrigation2StopH = 0;
+int irrigationMode=0;
+int autoIrrigationDuration=1;
+int irrigationStop=0;
 
-int pump = D6;
-int valve = D5;
+int moistureLevel=0;
+int moistureThreshold=0;
+
 int TimeH;
 int TimeM;
 String DateDay;
@@ -85,6 +94,18 @@ BLYNK_WRITE(V4) {
 BLYNK_WRITE(V7) {
   second_duration = param.asInt();
 }
+BLYNK_WRITE(V13) {
+  irrigationMode = param.asInt();
+}
+
+BLYNK_WRITE(V12) {
+  autoIrrigationDuration = param.asInt();
+}
+
+BLYNK_WRITE(V15) {
+  irrigationStop = param.asInt();
+}
+
 // This function is called every time the device is connected to the Blynk.Cloud
 BLYNK_CONNECTED()
 {
@@ -92,9 +113,10 @@ BLYNK_CONNECTED()
   Blynk.syncVirtual(V1);
   Blynk.syncVirtual(V2);
   Blynk.syncVirtual(V3);
-
   Blynk.syncVirtual(V4);
   Blynk.syncVirtual(V7);
+  Blynk.syncVirtual(V13);
+   Blynk.syncVirtual(V12);
   String first_time = String(first_irrigation_start_hour) + ":" + String(first_irrigation_start_minute);
   String second_time = String(second_irrigation_start_hour) + ":" + String(second_irrigation_start_minute);
   String irrigationTimes = first_time + " and " + second_time;
@@ -162,6 +184,7 @@ void setup ()
       digitalWrite(wifi, HIGH);
       delay(500);
       digitalWrite(wifi, LOW);
+      delay(500);
       Serial.print(".");
 
     }
@@ -176,9 +199,12 @@ void setup ()
   timer.setInterval(60000L, timeKeeper);
   pinMode(pump, OUTPUT);
   pinMode(valve, OUTPUT);
+  pinMode(StatusLED,OUTPUT);
+  
   //turnoff the valves and pump
   digitalWrite(valve, HIGH);
   digitalWrite(pump, HIGH);
+  digitalWrite(StatusLED, HIGH);
   String startTime = String(TimeH) + ":" + String(TimeM) + "  " + String(DateDay);
   Blynk.virtualWrite(V8, startTime);//send MCU last start time
 
@@ -192,7 +218,28 @@ void loop () {
   timer.run();//run the timer
 
 }
+int last_irrigation1H=0;
+int last_irrigation1M=0;
+int last_irrigation2H=0;
+int last_irrigation2M=0;
 void setIrrigationSchedule() {
+  if (last_irrigation1H!=first_irrigation_start_hour||last_irrigation1M!=first_irrigation_start_minute){
+    irrigation_started = false;
+    last_irrigation1M=first_irrigation_start_minute;
+    last_irrigation1H=first_irrigation_start_hour;
+    last_irrigation2M=second_irrigation_start_minute;
+    last_irrigation2H=second_irrigation_start_hour;
+    Blynk.virtualWrite(V14, "Irrigation schedule updated");
+  }
+if (last_irrigation2H!=second_irrigation_start_hour||last_irrigation2M!=second_irrigation_start_minute){
+    irrigation_started = false;
+    last_irrigation2M=second_irrigation_start_minute;
+    last_irrigation2H=second_irrigation_start_hour;
+    last_irrigation1M=first_irrigation_start_minute;
+    last_irrigation1H=first_irrigation_start_hour;
+    Blynk.virtualWrite(V14, "Irrigation schedule updated");
+  }
+  
   if (first_irrigation_start_minute + irrigation_duration > 59) {
     irrigationStopH = first_irrigation_start_hour + 1 ;
     irrigationStopM = (first_irrigation_start_minute + irrigation_duration) - 60 ;
@@ -214,13 +261,27 @@ void setIrrigationSchedule() {
 }
 void checkTime() {
   setIrrigationSchedule();
-  if (realTimeset) {
+//   Blynk.syncVirtual(V15);//Update the pin for scheduling irigation
+  if (irrigationStop==0&&irrigation_started == true){
+    stopIrrigation();
+      Serial.println("Irrigation Stopped");
+//      irrigation_started = false;
+      String Time = String(TimeH) + ":" + String(TimeM);
+      Blynk.virtualWrite(V9, Time);
+      Blynk.virtualWrite(V15, 0);
+      Blynk.virtualWrite(V14, "Irrigation Stopped Manually:"+String(irrigationStop));
+    
+  }
+//  Blynk.syncVirtual(V15);//Update the pin for scheduling irigation
+  if (realTimeset&&irrigationMode==0) {
     if (TimeH == irrigationStopH && TimeM == irrigationStopM && irrigation_started == true) {
       stopIrrigation();
       Serial.println("Irrigation Stopped");
       irrigation_started = false;
       String Time = String(TimeH) + ":" + String(TimeM);
       Blynk.virtualWrite(V9, Time);
+      Blynk.virtualWrite(V15, 0);
+      Blynk.virtualWrite(V14, "Scheduled Irrigation Stopped Automatically");
     }
     else if (TimeH == irrigation2StopH && TimeM == irrigation2StopM && irrigation_started == true) {
       stopIrrigation();
@@ -228,6 +289,9 @@ void checkTime() {
       irrigation_started = false;
       String Time = String(TimeH) + ":" + String(TimeM);
       Blynk.virtualWrite(V9, Time);
+      Blynk.virtualWrite(V15, 0);
+      
+      Blynk.virtualWrite(V14, "Scheduled Irrigation Stopped Automatically");
     }
     else if (TimeH == first_irrigation_start_hour && TimeM == first_irrigation_start_minute && !irrigation_started) {
       startIrrigation();
@@ -236,6 +300,9 @@ void checkTime() {
       String Time = String(first_irrigation_start_hour) + ":" + String(first_irrigation_start_minute);
       Blynk.virtualWrite(V5, Time);
       Blynk.virtualWrite(V6, DateDay);
+      Blynk.virtualWrite(V15, 1);
+      irrigationStop=1;
+      Blynk.virtualWrite(V14, "Scheduled Irrigation Stated Automatically");
       delay(50);
 
     }
@@ -249,8 +316,47 @@ void checkTime() {
       Blynk.virtualWrite(V6, DateDay);
     }
   }
+  else if (irrigationMode==1){
+    if (moistureLevel<moistureThreshold){
+      if (autoirrigate()){
+        startIrrigation();
+      Serial.println("irrigating till:" + String(irrigationStopH) + ":" + String(irrigationStopM));
+      irrigation_started = true;
+      String Time = String(first_irrigation_start_hour) + ":" + String(first_irrigation_start_minute);
+      Blynk.virtualWrite(V5, Time);
+      Blynk.virtualWrite(V6, DateDay);
+      Blynk.virtualWrite(V15, 1);
+      irrigationStop=1;
+      Blynk.virtualWrite(V14, "Auto Irrigation Started");
+      delay(50);
+      }
+      
+      
+    }
+    else{
+    stopIrrigation();
+      Serial.println("Irrigation Stopped");
+      irrigation_started = false;
+      String Time = String(TimeH) + ":" + String(TimeM);
+      Blynk.virtualWrite(V9, Time);
+      Blynk.virtualWrite(V15, 0);
+      
+      Blynk.virtualWrite(V14, "Auto Irrigation Stopped");
+    
+  }
+    
+  }
+
+  
 }
 
+bool autoirrigate(){
+  if (TimeH>=18&&TimeH<=19){
+   
+    return true;
+  }
+  
+}
 void startIrrigation() {
   digitalWrite(pump, LOW);
   digitalWrite(valve, LOW);
@@ -261,7 +367,8 @@ void stopIrrigation() {
 }
 
 void sendMoisture() {
-  int moisture = analogRead(A0);
-  Serial.println(moisture);
-  Blynk.virtualWrite(V10, moisture);
+  moistureLevel = map(analogRead(A0), 0,1023, 100,0);
+  Serial.print("FYI: Moisture");
+  Serial.println(moistureLevel);
+  Blynk.virtualWrite(V10, moistureLevel);
 }
